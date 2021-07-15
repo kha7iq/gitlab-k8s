@@ -1,10 +1,7 @@
 <h2 align="center">
   <br>
-  <p align="center"><img width=30% src="https://raw.githubusercontent.com/kha7iq/gitlab-k8s/master/.github/img/gitlab-k8s.png"></p>
+  <p align="center"><img width=50% src="https://raw.githubusercontent.com/kha7iq/gitlab-k8s/master/.github/img/gitlab-k8s.png"></p>
 </h2>
-
-
----
 
 ## About
 
