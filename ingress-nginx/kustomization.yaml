@@ -26,7 +26,7 @@ patchesJSON6902:
       value: gitlab-web-ui.example.com
     - op: replace
       path: /spec/tls/0/secretName
-      value: stack-pk-wildcard-secret
+      value: tls-wildcard-secret
 - target:
     group: extensions
     version: v1beta1
@@ -41,4 +41,4 @@ patchesJSON6902:
       value: registry.example.com
     - op: replace
       path: /spec/tls/0/secretName
-      value: stack-pk-wildcard-secret
+      value: tls-wildcard-secret
