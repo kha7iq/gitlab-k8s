@@ -138,8 +138,8 @@ data:
     production:
       adapter: postgresql
       encoding: unicode
-      database: gitlabhq_production
-      username: gitlab
+      database: {{ .GITLAB_POSTGRES_DB_NAME }}
+      username: {{ .GITLAB_POSTGRES_USER }}
       password: "<%= File.read("/etc/gitlab/postgres/psql-password").strip.dump[1..-2] %>"
       host: "{{ .GITLAB_POSTGRES_HOST }}"
       port: {{ .GITLAB_POSTGRES_PORT }}
