@@ -1,0 +1,7 @@
+bases:
+  - gitlab
+  - ingress-nginx
+  - secrets
+  - migration
+
+namespace: gitlab
