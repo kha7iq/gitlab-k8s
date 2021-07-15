@@ -1,0 +1,42 @@
+resources:
+  - deployment.yml
+  - configmap.yml
+
+images:
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-shell
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-shell
+  newTag: v13.18.0
+
+- name: registry.gitlab.com/gitlab-org/build/cng/gitaly
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitaly
+  newTag: v13.12.4
+
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-container-registry
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-container-registry
+  newTag: v3.4.1-gitlab
+
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-sidekiq-ce
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-sidekiq-ce
+  newTag: v13.12.4
+
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-webservice-ce
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-webservice-ce
+  newTag: v13.12.4
+
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-workhorse-ce
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-workhorse-ce
+  newTag: v13.12.4
+
+- name: registry.gitlab.com/gitlab-org/build/cng/alpine-certificates
+  newName: registry.gitlab.com/gitlab-org/build/cng/alpine-certificates
+  newTag: 20191127-r2
+
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-exporter
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-exporter
+  newTag: 10.2.0
+
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-task-runner-ce
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-task-runner-ce
+  newTag: v13.12.4
+
+

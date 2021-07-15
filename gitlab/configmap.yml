@@ -1,0 +1,1158 @@
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-gitaly
+  labels:
+    app: gitaly
+    release: gitlab
+data:
+  configure: |
+    set -e
+    mkdir -p /init-secrets/gitaly /init-secrets/shell
+    cp -v -r -L /init-config/.gitlab_shell_secret  /init-secrets/shell/.gitlab_shell_secret
+    cp -v -r -L /init-config/gitaly_token  /init-secrets/gitaly/gitaly_token
+  config.toml.erb: |
+    # The directory where Gitaly's executables are stored
+    bin_dir = "/usr/local/bin"
+
+    # listen on a TCP socket. This is insecure (no authentication)
+    listen_addr = "0.0.0.0:8075"
+
+    # Directory where internal sockets reside
+    internal_socket_dir = "/home/git"
+
+    # If metrics collection is enabled, inform gitaly about that
+    prometheus_listen_addr = "localhost:9236"
+    
+    <% @storages = [  "default",  ] %>
+
+    <% @index=`echo ${HOSTNAME##*-}`.to_i %>
+    <% if @storages.length > @index %>
+    [[storage]]
+    name = "<%= @storages[@index] %>"
+    path = "/home/git/repositories"
+    <% else %>
+    <% raise Exception, "Storage for node #{@index} is not present in the storageNames array. Did you use kubectl to scale up? You need to solely use helm for this purpose." %>
+    <% end %>
+
+    [logging]
+    format = "json"
+    dir = "/var/log/gitaly"
+
+    [auth]
+    token = "<%= File.read('/etc/gitlab-secrets/gitaly/gitaly_token').strip.dump[1..-2] %>"
+
+    [git]
+
+    [gitaly-ruby]
+    # The directory where gitaly-ruby is installed
+    dir = "/srv/gitaly-ruby"
+    rugged_git_config_search_path = "/usr/local/etc"
+
+    [gitlab-shell]
+    # The directory where gitlab-shell is installed
+    dir = "/srv/gitlab-shell"
+
+    [gitlab]
+    # location of shared secret for GitLab Shell / API interaction
+    secret_file = "/etc/gitlab-secrets/shell/.gitlab_shell_secret"
+    # URL of API
+    url = "http://gitlab-webservice-default.gitlab.svc:8181/"
+
+    [gitlab.http-settings]
+    # read_timeout = 300
+    # user = someone
+    # password = somepass
+    # ca_file = /etc/ssl/cert.pem
+    # ca_path = /etc/pki/tls/certs
+    self_signed_cert = false
+
+    [hooks]
+    # directory containing custom hooks
+    custom_hooks_dir = "/home/git/custom_hooks"
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-gitlab-shell-sshd
+
+  labels:
+    app: gitlab-shell
+    release: gitlab
+data:
+  sshd_config: |
+    #	$OpenBSD: sshd_config,v 1.101 2017/03/14 07:19:07 djm Exp $
+
+    # This is the sshd server system-wide configuration file.  See
+    # sshd_config(5) for more information.
+
+    # This sshd was compiled with PATH=/bin:/usr/bin:/sbin:/usr/sbin
+
+    # The strategy used for options in the default sshd_config shipped with
+    # OpenSSH is to specify options with their default value where
+    # possible, but leave them commented.  Uncommented options override the
+    # default value.
+
+    Port 2222
+    #AddressFamily any
+    #ListenAddress 0.0.0.0
+    #ListenAddress ::
+
+    #HostKey /etc/ssh/ssh_host_rsa_key
+    #HostKey /etc/ssh/ssh_host_dsa_key
+    #HostKey /etc/ssh/ssh_host_ecdsa_key
+    #HostKey /etc/ssh/ssh_host_ed25519_key
+
+    # Ciphers and keying
+    #RekeyLimit default none
+
+    # Logging
+    #SyslogFacility AUTH
+    LogLevel ERROR
+
+    # Authentication:
+
+    PermitRootLogin no
+    #StrictModes yes
+    #MaxAuthTries 6
+    #MaxSessions 10
+
+    #PubkeyAuthentication yes
+
+    #AuthorizedPrincipalsFile none
+
+    # For this to work you will also need host keys in /etc/ssh/ssh_known_hosts
+    #HostbasedAuthentication no
+    # Change to yes if you don't trust ~/.ssh/known_hosts for
+    # HostbasedAuthentication
+    #IgnoreUserKnownHosts no
+    # Don't read the user's ~/.rhosts and ~/.shosts files
+    #IgnoreRhosts yes
+
+    #PermitEmptyPasswords no
+
+    # Change to no to disable s/key passwords
+    #ChallengeResponseAuthentication yes
+
+    # Kerberos options
+    #KerberosAuthentication no
+    #KerberosOrLocalPasswd yes
+    #KerberosTicketCleanup yes
+    #KerberosGetAFSToken no
+
+    # GSSAPI options
+    #GSSAPIAuthentication no
+    #GSSAPICleanupCredentials yes
+
+    # Set this to 'yes' to enable PAM authentication, account processing,
+    # and session processing. If this is enabled, PAM authentication will
+    # be allowed through the ChallengeResponseAuthentication and
+    # PasswordAuthentication.  Depending on your PAM configuration,
+    # PAM authentication via ChallengeResponseAuthentication may bypass
+    # the setting of "PermitRootLogin without-password".
+    # If you just want the PAM account and session checks to run without
+    # PAM authentication, then enable this but set PasswordAuthentication
+    # and ChallengeResponseAuthentication to 'no'.
+    #UsePAM no
+
+    #AllowAgentForwarding yes
+    #AllowTcpForwarding yes
+    #GatewayPorts no
+    #X11Forwarding no
+    #X11DisplayOffset 10
+    #X11UseLocalhost yes
+    #PermitTTY yes
+    #PrintMotd yes
+    #PrintLastLog yes
+    #TCPKeepAlive yes
+    #UseLogin no
+    #PermitUserEnvironment no
+    #Compression delayed
+    #ClientAliveInterval 0
+    #ClientAliveCountMax 3
+    #UseDNS no
+    PidFile /srv/sshd/sshd.pid
+    #PermitTunnel no
+    #ChrootDirectory none
+    #VersionAddendum none
+
+    # no default banner path
+    #Banner none
+
+    # override default of no subsystems
+    # Subsystem	sftp	/usr/lib/ssh/sftp-server
+
+    # the following are HPN related configuration options
+    # tcp receive buffer polling. disable in non autotuning kernels
+    #TcpRcvBufPoll yes
+
+    # disable hpn performance boosts
+    #HPNDisabled no
+
+    # buffer size for hpn to non-hpn connections
+    #HPNBufferSize 2048
+
+
+    # Example of overriding settings on a per-user basis
+    #Match User anoncvs
+    #	X11Forwarding no
+    #	AllowTcpForwarding no
+    #	PermitTTY no
+    #	ForceCommand cvs server
+
+    # The default is to check both .ssh/authorized_keys and .ssh/authorized_keys2
+    # but this is overridden so installations will only check .ssh/authorized_keys
+    AuthorizedKeysFile	.ssh/authorized_keys
+
+    AuthorizedKeysCommand /authorized_keys %u %k
+    AuthorizedKeysCommandUser git
+
+    PasswordAuthentication no
+
+    AllowUsers git
+
+    # Enable the use of Git protcol v2
+    AcceptEnv GIT_PROTOCOL
+    
+    # Hard disable all forwarding
+    DisableForwarding yes
+    
+    # Specifies the maximum number of concurrent unauthenticated connections to the SSH daemon.
+    # See `man sshd_config(5)`
+    
+    MaxStartups 10:30:100
+    
+
+    # Specifies amount of time athat the server will disconnect after if the user has not successfully logged in
+    LoginGraceTime 120
+# Leave this here - This line denotes end of block to the parser.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-gitlab-shell
+
+  labels:
+    app: gitlab-shell
+    release: gitlab
+
+data:
+  configure: |
+    set -e
+    config_dir="/init-config"
+    secret_dir="/init-secrets"
+    
+    for secret in shell ; do
+      mkdir -p "${secret_dir}/${secret}"
+      cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+    done
+    for secret in redis minio objectstorage postgres ldap omniauth smtp kas pages oauth-secrets ; do
+      if [ -e "${config_dir}/${secret}" ]; then
+        mkdir -p "${secret_dir}/${secret}"
+        cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+      fi
+    done
+    mkdir -p /${secret_dir}/ssh
+    cp -v -r -L /${config_dir}/ssh_host_* /${secret_dir}/ssh/
+    chmod 0400 /${secret_dir}/ssh/ssh_host_*
+  config.yml.erb: |
+    # GitLab user. git by default
+    user: git
+
+    # Url to gitlab instance. Used for api calls. Should end with a slash.
+    gitlab_url: "http://gitlab-webservice-default.gitlab.svc:8181/"
+
+    secret_file: /etc/gitlab-secrets/shell/.gitlab_shell_secret
+
+    http_settings:
+      self_signed_cert: false
+
+    # File used as authorized_keys for gitlab user
+    auth_file: "/home/git/.ssh/authorized_keys"
+
+    # Log file.
+    # Default is gitlab-shell.log in the root directory.
+    log_file: "/var/log/gitlab-shell/gitlab-shell.log"
+
+    log_format: text
+
+    # Audit usernames.
+    # Set to true to see real usernames in the logs instead of key ids, which is easier to follow, but
+    # incurs an extra API call on every gitlab-shell command.
+    audit_usernames: false
+
+    
+# Leave this here - This line denotes end of block to the parser.
+---
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-sidekiq-all-in-1
+
+  labels:
+    app: sidekiq
+    release: gitlab
+    queue_pod_name: all-in-1
+data:
+  sidekiq_queues.yml.erb: |
+    <%=
+       # this works because codebase default content has only `:
+       sq = YAML.load_file('/srv/gitlab/config/sidekiq_queues.yml')
+       
+       sq.to_yaml
+    %>
+# Leave this here - This line denotes end of block to the parser.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-sidekiq
+
+  labels:
+    app: sidekiq
+    release: gitlab
+data:
+  installation_type: |
+    gitlab-kustomize
+  database.yml.erb: |
+    production:
+      adapter: postgresql
+      encoding: unicode
+      database: gitlabhq_production
+      username: gitlab
+      password: "<%= File.read("/etc/gitlab/postgres/psql-password").strip.dump[1..-2] %>"
+      host: "{{ .GITLAB_POSTGRES_HOST }}"
+      port: {{ .GITLAB_POSTGRES_PORT }}
+      connect_timeout: 
+      application_name: 
+      prepared_statements: false
+      
+      
+  smtp_settings.rb: |
+    
+  resque.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      
+      id:
+  
+  
+  
+  cable.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      
+      id:
+      adapter: redis
+  gitlab.yml.erb: |
+    production: &base
+      gitlab:
+        host: {{ .GITLAB_URL }}
+        https: true
+        max_request_duration_seconds: 57
+        impersonation_enabled: 
+        application_settings_cache_seconds: 60
+        usage_ping_enabled: true
+        seat_link_enabled: true
+        default_can_create_group: true
+        username_changing_enabled: true
+        issue_closing_pattern: 
+        default_theme: 
+        default_projects_features:
+          issues: true
+          merge_requests: true
+          wiki: true
+          snippets: true
+          builds: true
+          container_registry: true
+        webhook_timeout: 
+        trusted_proxies:
+        time_zone: "UTC"        
+        email_from: "gitlab@prod.env"
+        email_display_name: "GitLab"
+        email_reply_to: "noreply@prod.env"
+        email_subject_suffix: ""
+      
+      gravatar:
+        plain_url: 
+        ssl_url: 
+      extra:
+        
+        
+        
+      # Consolidated object storage configuration
+      ## property local configuration will override object_store
+      object_store:
+        enabled: true
+        direct_upload: true
+        background_upload: false
+        proxy_download: true
+        connection: <%= YAML.load_file("/etc/gitlab/objectstorage/object_store").to_json() %>
+        objects:
+          artifacts:
+            bucket: gitlab-artifacts
+          lfs:
+            bucket: gitlab-lfs
+          uploads:
+            bucket: gitlab-uploads
+          packages:
+            bucket: gitlab-packages
+          
+          terraform_state:
+            bucket: gitlab-terraform-state
+          
+          pages:
+            bucket: gitlab-pages
+      artifacts:
+        enabled: true
+      lfs:
+        enabled: true
+      uploads:
+        enabled: true
+      packages:
+        enabled: true
+      external_diffs:
+        enabled: false
+        when: 
+      terraform_state:
+        enabled: true
+      dependency_proxy:
+        enabled: false
+      pseudonymizer:
+        manifest: config/pseudonymizer.yml
+        upload:
+          remote_directory: gitlab-pseudo
+      
+      sentry:
+        enabled: false
+        dsn: 
+        clientside_dsn: 
+        environment: 
+      
+      sidekiq:
+      pages:
+        enabled: false
+        access_control: false
+        artifacts_server: true
+        path: /srv/gitlab/shared/pages
+        host: {{ .GITLAB_PAGES_URL }}
+        port: 443
+        https: true
+        secret_file: /etc/gitlab/pages/secret
+        external_http: false
+        external_https: false
+      mattermost:
+        enabled: false
+      ## Registry Integration
+      registry:
+        enabled: true
+        host: {{ .GITLAB_REGISTRY_URL }}
+        api_url: http://gitlab-registry.gitlab.svc:5000
+        key: /etc/gitlab/registry/gitlab-registry.key
+        issuer: gitlab-issuer
+        notification_secret: <%= YAML.load_file("/etc/gitlab/registry/notificationSecret").flatten.first %>
+      gitlab_ci:
+      ldap:
+        enabled: false
+      
+      omniauth:
+        enabled: false
+        sync_profile_from_provider: []
+        sync_profile_attributes: ["email"]
+        allow_single_sign_on: ["saml"]
+        block_auto_created_users: true
+        auto_link_ldap_user: false
+        auto_link_saml_user: false
+        external_providers: []
+      kerberos:
+        enabled: false
+      shared:
+      gitaly:
+        client_path: /home/git/gitaly/bin
+        token: "<%= File.read('/etc/gitlab/gitaly/gitaly_token').strip.dump[1..-2] %>"
+      repositories:
+        storages: # You must have at least a `default` storage path.
+          default:
+            path: /var/opt/gitlab/repo
+            gitaly_address: tcp://gitlab-gitaly-0.gitlab-gitaly.gitlab.svc:8075
+          
+      backup:
+        path: "tmp/backups"   # Relative paths are relative to Rails.root (default: tmp/backups/)
+      
+      gitlab_shell:
+        path: /home/git/gitlab-shell/
+        hooks_path: /home/git/gitlab-shell/hooks/
+        upload_pack: true
+        receive_pack: true
+      workhorse:
+      git:
+        bin_path: /usr/bin/git
+      webpack:
+      monitoring:
+        ip_whitelist:
+          - 127.0.0.0/8
+        sidekiq_exporter:
+          enabled: true
+          address: 0.0.0.0
+          port: 3807
+      sidekiq:
+        log_format: default
+  configure: |
+    set -e
+    config_dir="/init-config"
+    secret_dir="/init-secrets"
+    
+    for secret in gitaly registry rails-secrets ; do
+      mkdir -p "${secret_dir}/${secret}"
+      cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+    done
+    for secret in redis minio objectstorage postgres ldap omniauth smtp kas pages oauth-secrets ; do
+      if [ -e "${config_dir}/${secret}" ]; then
+        mkdir -p "${secret_dir}/${secret}"
+        cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+      fi
+    done
+    
+    
+    
+# Leave this here - This line denotes end of block to the parser.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-task-runner
+
+  labels:
+    app: task-runner
+    release: gitlab
+data:
+  database.yml.erb: |
+    production:
+      adapter: postgresql
+      encoding: unicode
+      database: gitlabhq_production
+      username: gitlab
+      password: "<%= File.read("/etc/gitlab/postgres/psql-password").strip.dump[1..-2] %>"
+      host: "{{ .GITLAB_POSTGRES_HOST }}"
+      port: {{ .GITLAB_POSTGRES_PORT }}
+      connect_timeout: 
+      application_name: 
+      prepared_statements: false
+      
+      
+  smtp_settings.rb: |
+    
+  resque.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      
+      id:
+  
+  
+  
+  cable.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      
+      id:
+      adapter: redis
+  gitlab.yml.erb: |
+    production: &base
+      gitlab:
+        host: {{ .GITLAB_URL }}
+        https: true
+        max_request_duration_seconds: 57
+        impersonation_enabled: 
+        application_settings_cache_seconds: 60
+        usage_ping_enabled: true
+        seat_link_enabled: true
+        default_can_create_group: true
+        username_changing_enabled: true
+        issue_closing_pattern: 
+        default_theme: 
+        default_projects_features:
+          issues: true
+          merge_requests: true
+          wiki: true
+          snippets: true
+          builds: true
+          container_registry: true
+        webhook_timeout: 
+        trusted_proxies:
+        time_zone: "UTC"        
+        email_from: "gitlab@prod.env"
+        email_display_name: "GitLab"
+        email_reply_to: "noreply@prod.env"
+        email_subject_suffix: ""
+      
+      # Consolidated object storage configuration
+      ## property local configuration will override object_store
+      object_store:
+        enabled: true
+        direct_upload: true
+        background_upload: false
+        proxy_download: true
+        connection: <%= YAML.load_file("/etc/gitlab/objectstorage/object_store").to_json() %>
+        objects:
+          artifacts:
+            bucket: gitlab-artifacts
+          lfs:
+            bucket: gitlab-lfs
+          uploads:
+            bucket: gitlab-uploads
+          packages:
+            bucket: gitlab-packages
+          
+          terraform_state:
+            bucket: gitlab-terraform-state
+
+          pages:
+            bucket: gitlab-pages
+      artifacts:
+        enabled: true
+      lfs:
+        enabled: true
+      uploads:
+        enabled: true
+      packages:
+        enabled: true
+      external_diffs:
+        enabled: false
+        when: 
+      terraform_state:
+        enabled: true
+      dependency_proxy:
+        enabled: false
+      pseudonymizer:
+        manifest: config/pseudonymizer.yml
+        upload:
+          remote_directory: gitlab-pseudo
+      
+      sidekiq:
+      
+      pages:
+        enabled: false
+        access_control: false
+        artifacts_server: true
+        path: /srv/gitlab/shared/pages
+        host: {{ .GITLAB_PAGES_URL }}
+        port: 443
+        https: true
+        secret_file: /etc/gitlab/pages/secret
+        external_http: false
+        external_https: false
+      mattermost:
+        enabled: false
+      ## Registry Integration
+      registry:
+        enabled: true
+        host: {{ .GITLAB_REGISTRY_URL }}
+        api_url: http://gitlab-registry.gitlab.svc:5000
+        key: /etc/gitlab/registry/gitlab-registry.key
+        issuer: gitlab-issuer
+        notification_secret: <%= YAML.load_file("/etc/gitlab/registry/notificationSecret").flatten.first %>
+      gitlab_ci:
+      ldap:
+        enabled: false
+      
+      omniauth:
+        enabled: false
+        sync_profile_from_provider: []
+        sync_profile_attributes: ["email"]
+        allow_single_sign_on: ["saml"]
+        block_auto_created_users: true
+        auto_link_ldap_user: false
+        auto_link_saml_user: false
+        external_providers: []
+      kerberos:
+        enabled: false
+      shared:
+      gitaly:
+        client_path: /home/git/gitaly/bin
+        token: "<%= File.read('/etc/gitlab/gitaly/gitaly_token').strip.dump[1..-2] %>"
+      repositories:
+        storages: # You must have at least a `default` storage path.
+          default:
+            path: /var/opt/gitlab/repo
+            gitaly_address: tcp://gitlab-gitaly-0.gitlab-gitaly.gitlab.svc:8075
+          
+      backup:
+        path: "tmp/backups"   # Relative paths are relative to Rails.root (default: tmp/backups/)
+      
+      gitlab_shell:
+        path: /home/git/gitlab-shell/
+        hooks_path: /home/git/gitlab-shell/hooks/
+        upload_pack: true
+        receive_pack: true
+        secret_file: /etc/gitlab/shell/.gitlab_shell_secret
+      workhorse:
+      git:
+        bin_path: /usr/bin/git
+      webpack:
+      monitoring:
+        ip_whitelist:
+          - 127.0.0.0/8
+        sidekiq_exporter:
+      extra:
+  configure: |
+    set -e
+    config_dir="/init-config"
+    secret_dir="/init-secrets"
+    
+    for secret in shell gitaly registry rails-secrets ; do
+      mkdir -p "${secret_dir}/${secret}"
+      cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+    done
+    for secret in redis minio objectstorage postgres ldap omniauth smtp kas pages oauth-secrets ; do
+      if [ -e "${config_dir}/${secret}" ]; then
+        mkdir -p "${secret_dir}/${secret}"
+        cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+      fi
+    done
+    
+    
+    
+    if [ ! -f "/${secret_dir}/objectstorage/.s3cfg" ]; then
+    cat <<EOF > "/${secret_dir}/.s3cfg"
+    [default]
+    access_key = $(cat /init-secrets/minio/accesskey)
+    secret_key = $(cat /init-secrets/minio/secretkey)
+    bucket_location = us-east-1
+    host_base = minio.prod.env
+    host_bucket = minio.prod.env/%(bucket)
+    default_mime_type = binary/octet-stream
+    enable_multipart = True
+    multipart_max_chunks = 10000
+    multipart_chunk_size_mb = 128
+    recursive = True
+    recv_chunk = 65536
+    send_chunk = 65536
+    server_side_encryption = False
+    signature_v2 = True
+    socket_timeout = 300
+    use_mime_magic = False
+    verbosity = WARNING
+    website_endpoint = https://minio.prod.env
+    EOF
+    else
+      mv "/${secret_dir}/objectstorage/.s3cfg" "/${secret_dir}/.s3cfg"
+    fi
+  configure-gsutil: |
+    # The following script is used to configure gsutil when creating backups
+    # It provides inputs to the `gsutil config -e` prompt as follows:
+    # 1) Path to service account JSON key file
+    # 2) Do not set permissions for key file
+    # 3) GCP Project ID
+    # 4) Decline anonymous usage statistics
+    printf "$GOOGLE_APPLICATION_CREDENTIALS\nN\n\nN\n" | gsutil config -e
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-webservice
+
+  labels:
+    app: webservice
+    release: gitlab
+data:
+  installation_type: |
+    gitlab-kustomize
+  database.yml.erb: |
+    production:
+      adapter: postgresql
+      encoding: unicode
+      database: {{ .GITLAB_POSTGRES_DB_NAME }}
+      username: {{ .GITLAB_POSTGRES_USER }}
+      password: "<%= File.read("/etc/gitlab/postgres/psql-password").strip.dump[1..-2] %>"
+      host: "{{ .GITLAB_POSTGRES_HOST }}"
+      port: {{ .GITLAB_POSTGRES_PORT }}
+      connect_timeout: 
+      application_name: 
+      prepared_statements: false
+      
+      
+  smtp_settings.rb: |
+    
+  resque.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      
+      id:
+  
+  cable.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      id:
+      adapter: redis
+  gitlab.yml.erb: |
+    production: &base
+      gitlab:
+        host: {{ .GITLAB_URL }}
+        https: true
+        max_request_duration_seconds: 57
+        impersonation_enabled: 
+        application_settings_cache_seconds: 60
+        usage_ping_enabled: true
+        seat_link_enabled: true
+        default_can_create_group: true
+        username_changing_enabled: true
+        issue_closing_pattern: 
+        default_theme: 
+        default_projects_features:
+          issues: true
+          merge_requests: true
+          wiki: true
+          snippets: true
+          builds: true
+          container_registry: true
+        webhook_timeout: 
+        trusted_proxies:
+        time_zone: "UTC"        
+        email_from: "gitlab@prod.env"
+        email_display_name: "GitLab"
+        email_reply_to: "noreply@prod.env"
+        email_subject_suffix: ""
+      
+      gravatar:
+        plain_url: 
+        ssl_url: 
+      extra:
+        
+        
+        
+      # Consolidated object storage configuration
+      ## property local configuration will override object_store
+      object_store:
+        enabled: true
+        direct_upload: true
+        background_upload: false
+        proxy_download: true
+        connection: <%= YAML.load_file("/etc/gitlab/objectstorage/object_store").to_json() %>
+        objects:
+          artifacts:
+            bucket: gitlab-artifacts
+          lfs:
+            bucket: gitlab-lfs
+          uploads:
+            bucket: gitlab-uploads
+          packages:
+            bucket: gitlab-packages
+          
+          terraform_state:
+            bucket: gitlab-terraform-state
+          pages:
+            bucket: gitlab-pages
+      artifacts:
+        enabled: true
+      lfs:
+        enabled: true
+      uploads:
+        enabled: true
+      packages:
+        enabled: true
+      external_diffs:
+        enabled: false
+        when: 
+      terraform_state:
+        enabled: true
+      dependency_proxy:
+        enabled: false
+      
+      sentry:
+        enabled: false
+        dsn: 
+        clientside_dsn: 
+        environment: 
+      
+      sidekiq:
+      pages:
+        enabled: false
+        access_control: false
+        artifacts_server: true
+        path: /srv/gitlab/shared/pages
+        host: {{ .GITLAB_PAGES_URL }}
+        port: 443
+        https: true
+        secret_file: /etc/gitlab/pages/secret
+        external_http: false
+        external_https: false
+      mattermost:
+        enabled: false
+      gitlab_ci:
+      ldap:
+        enabled: false
+      
+      omniauth:
+        enabled: false
+        sync_profile_from_provider: []
+        sync_profile_attributes: ["email"]
+        allow_single_sign_on: ["saml"]
+        block_auto_created_users: true
+        auto_link_ldap_user: false
+        auto_link_saml_user: false
+        external_providers: []
+      kerberos:
+        enabled: false
+      shared:
+      gitaly:
+        client_path: /home/git/gitaly/bin
+        token: "<%= File.read('/etc/gitlab/gitaly/gitaly_token').strip.dump[1..-2] %>"
+      repositories:
+        storages: # You must have at least a `default` storage path.
+          default:
+            path: /var/opt/gitlab/repo
+            gitaly_address: tcp://gitlab-gitaly-0.gitlab-gitaly.gitlab.svc:8075
+          
+      backup:
+        path: "tmp/backups"   # Relative paths are relative to Rails.root (default: tmp/backups/)
+      
+      gitlab_shell:
+        path: /home/git/gitlab-shell/
+        hooks_path: /home/git/gitlab-shell/hooks/
+        upload_pack: true
+        receive_pack: true
+        ssh_port: 22
+        secret_file: /etc/gitlab/shell/.gitlab_shell_secret
+      workhorse:
+        secret_file: /etc/gitlab/gitlab-workhorse/secret
+      git:
+        bin_path: /usr/bin/git
+      webpack:
+      monitoring:
+        ip_whitelist:
+          - 0.0.0.0/0
+        web_exporter:
+          enabled: false
+          address: 0.0.0.0
+          port: 8083
+        sidekiq_exporter:
+      shutdown:
+        blackout_seconds: <%= ENV["SHUTDOWN_BLACKOUT_SECONDS"] %>
+      rack_attack:
+        git_basic_auth:
+      ## Registry Integration
+      registry:
+        enabled: true
+        host: {{ .GITLAB_REGISTRY_URL }}
+        api_url: http://gitlab-registry.gitlab.svc:5000
+        key: /etc/gitlab/registry/gitlab-registry.key
+        issuer: gitlab-issuer
+        notification_secret: <%= YAML.load_file("/etc/gitlab/registry/notificationSecret").flatten.first %>
+      smartcard:
+        enabled: false
+        ca_file: '/etc/gitlab/rails-secrets/smartcard-ca.crt'
+        client_certificate_required_host: smartcard.prod.env
+        client_certificate_required_port: 443
+        san_extensions: false
+        required_for_git_access: false
+  configure: |
+    set -e
+    config_dir="/init-config"
+    secret_dir="/init-secrets"
+    
+    for secret in shell gitaly registry rails-secrets gitlab-workhorse ; do
+      mkdir -p "${secret_dir}/${secret}"
+      cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+    done
+    for secret in redis minio objectstorage postgres ldap omniauth smtp kas pages oauth-secrets ; do
+      if [ -e "${config_dir}/${secret}" ]; then
+        mkdir -p "${secret_dir}/${secret}"
+        cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+      fi
+    done
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-workhorse-default
+  labels:
+    app: webservice
+    release: gitlab
+data:
+  installation_type: |
+    gitlab-kustomize
+  workhorse-config.toml.erb: |
+    [redis]
+    URL = "redis://{{ .GITLAB_REDIS_HOST }}"
+    <%
+      require 'yaml'
+    
+      supported_providers = %w(AWS AzureRM)
+      provider = ''
+      aws_access_key_id = ''
+      aws_secret_access_key = ''
+    
+      azure_storage_account_name = ''
+      azure_storage_access_key = ''
+    
+      if File.exists? '/etc/gitlab/minio/accesskey'
+        provider = 'AWS'
+        aws_access_key_id = File.read('/etc/gitlab/minio/accesskey').strip.dump[1..-2]
+        aws_secret_access_key = File.read('/etc/gitlab/minio/secretkey').strip.dump[1..-2]
+      end
+    
+      if File.exists? '/etc/gitlab/objectstorage/object_store'
+        connection = YAML.safe_load(File.read('/etc/gitlab/objectstorage/object_store'))
+        provider = connection['provider']
+        if connection.has_key? 'aws_access_key_id'
+          aws_access_key_id = connection['aws_access_key_id']
+          aws_secret_access_key = connection['aws_secret_access_key']
+        elsif connection.has_key? 'azure_storage_account_name'
+          azure_storage_account_name = connection['azure_storage_account_name']
+          azure_storage_access_key = connection['azure_storage_access_key']
+        end
+      end
+    
+      if supported_providers.include? provider
+    %>
+    [object_storage]
+    provider = "<%= provider %>"
+    <%   if provider.eql? 'AWS' %>
+    # AWS / S3 object storage configuration.
+    [object_storage.s3]
+    # access/secret can be blank!
+    aws_access_key_id = "<%= aws_access_key_id %>"
+    aws_secret_access_key = "<%= aws_secret_access_key %>"
+    <%   elsif provider.eql? 'AzureRM' %>
+    # Azure Blob storage configuration.
+    [object_storage.azurerm]
+    azure_storage_account_name = "<%= azure_storage_account_name %>"
+    azure_storage_access_key = "<%= azure_storage_access_key %>"
+    <%
+        end
+      end
+    %>
+    [image_resizer]
+    max_scaler_procs = 2
+    max_filesize = 250000
+  configure: |
+      set -e
+      mkdir -p /init-secrets-workhorse/gitlab-workhorse
+      cp -v -r -L /init-config/gitlab-workhorse/secret /init-secrets-workhorse/gitlab-workhorse/secret
+      if [ -f /init-config/objectstorage/object_store ]; then
+        mkdir -p /init-secrets-workhorse/objectstorage
+        cp -v -r -L /init-config/objectstorage/object_store /init-secrets-workhorse/objectstorage/
+      fi
+# Leave this here - This line denotes end of block to the parser.
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-registry
+
+  labels:
+    app: registry
+    
+    release: gitlab
+data:
+  configure: |-
+    if [ -e /config/accesskey ] ; then
+      sed -e 's@ACCESS_KEY@'"$(cat /config/accesskey)"'@' -e 's@SECRET_KEY@'"$(cat /config/secretkey)"'@' /config/config.yml > /registry/config.yml
+    else
+      cp -v -r -L /config/config.yml  /registry/config.yml
+    fi
+    # Place the `http.secret` value from the kubernetes secret
+    sed -i -e 's@HTTP_SECRET@'"$(cat /config/httpSecret)"'@' /registry/config.yml
+    # Populate sensitive registry notification secrets in the config file
+    if [ -d /config/notifications ]; then
+      for i in /config/notifications/*; do
+        filename=$(basename $i);
+        sed -i -e 's@'"${filename}"'@'"$(cat $i)"'@' /registry/config.yml;
+      done
+    fi
+    # Insert any provided `storage` block from kubernetes secret
+    if [ -d /config/storage ]; then
+      # Copy contents of storage secret(s)
+      mkdir -p /registry/storage
+      cp -v -r -L /config/storage/* /registry/storage/
+      # Ensure there is a new line in the end
+      echo '' >> /registry/storage/config
+      # Default `delete.enabled: true` if not present.
+      ## Note: busybox grep doesn't support multiline, so we chain `egrep`.
+      if ! $(egrep -A1 '^delete:\s*$' /registry/storage/config | egrep -q '\s{2,4}enabled:') ; then
+        echo 'delete:' >> /registry/storage/config
+        echo '  enabled: true' >> /registry/storage/config
+      fi
+      # Indent /registry/storage/config 2 spaces before inserting into config.yml
+      sed -i 's/^/  /' /registry/storage/config
+      # Insert into /registry/config.yml after `storage:`
+      sed -i '/storage:/ r /registry/storage/config' /registry/config.yml
+      # Remove the now extraneous `config` file
+      rm /registry/storage/config
+    fi
+    # Set to known path, to used ConfigMap
+    cat /config/certificate.crt > /registry/certificate.crt
+    # Copy the optional profiling keyfile to the expected location
+    if [ -f /config/profiling-key.json ]; then
+      cp /config/profiling-key.json /registry/profiling-key.json
+    fi
+    # Insert Database password, if enabled
+    if [ -f /config/database_password ] ; then
+      sed -i -e 's@DB_PASSWORD_FILE@'"$(cat /config/database_password)"'@' /registry/config.yml
+    fi
+    # Copy the database TLS connection files to the expected location and set permissions
+    if [ -d /config/ssl ]; then
+      cp -r /config/ssl/ /registry/ssl
+      chmod 700 /registry/ssl
+      chmod 600 /registry/ssl/*.pem
+    fi
+  config.yml: |
+    version: 0.1
+    log:
+      fields:
+        service: registry
+      level: info
+    http:
+      debug:
+        addr: ':5001'
+        prometheus:
+          enabled: false
+          path: /metrics
+      draintimeout: 0
+      headers:
+        X-Content-Type-Options: [nosniff]
+      addr: :5000
+      secret: "HTTP_SECRET"
+      relativeurls: false
+    health:
+      storagedriver:
+        enabled: false
+        interval: 10s
+        threshold: 3
+    auth:
+      token:
+        realm: https://{{ .GITLAB_URL }}/jwt/auth
+        service: container_registry
+        issuer: "gitlab-issuer"
+        # This is provided from the initContainer execution, at a known path.
+        rootcertbundle: /etc/docker/registry/certificate.crt
+        autoredirect: false
+    compatibility:
+      schema1:
+        enabled: false
+    validation:
+      disabled: true
+    
+    notifications:
+    reporting:
+    profiling:
+    storage:
+      maintenance:
+        readonly:
+          enabled: false
+    
+    gc:
+      disabled: true
+    migration:
+
+  # minimal configuration, in order to do database migrations
+  migrations-config.yml: |
+    version: 0.1
+    log:
+      fields:
+        service: registry
+      level: info
