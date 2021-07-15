@@ -1,0 +1,193 @@
+# Source: gitlab/charts/gitlab/charts/migrations/templates/job.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: gitlab-migrations-1
+  labels:
+    app: migrations
+    release: gitlab
+spec:
+  activeDeadlineSeconds: 3600
+  backoffLimit: 6
+  template:
+    metadata:
+      labels:
+        app: migrations
+        release: gitlab
+    spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
+      
+      initContainers:
+        - name: certificates
+          image: "registry.gitlab.com/gitlab-org/build/cng/alpine-certificates"
+          volumeMounts:
+          - name: etc-ssl-certs
+            mountPath: /etc/ssl/certs
+            readOnly: false
+          resources:
+            requests:
+              cpu: 50m
+        - name: configure
+          command: ['sh', '/config/configure']
+          image: "busybox:latest"
+          volumeMounts:
+          - name: migrations-config
+            mountPath: /config
+            readOnly: true
+          - name: init-migrations-secrets
+            mountPath: /init-config
+            readOnly: true
+          - name: migrations-secrets
+            mountPath: /init-secrets
+            readOnly: false
+          resources:
+            requests:
+              cpu: 50m
+      restartPolicy: OnFailure      
+      containers:
+        
+        - name: migrations
+          image: "registry.gitlab.com/gitlab-org/build/cng/gitlab-task-runner-ce"
+          args:
+            - /scripts/wait-for-deps
+            - /scripts/db-migrate
+          env:
+            - name: CONFIG_TEMPLATE_DIRECTORY
+              value: '/var/opt/gitlab/templates'
+            - name: CONFIG_DIRECTORY
+              value: '/srv/gitlab/config'
+            - name: BYPASS_SCHEMA_VERSION
+              value: 'true'
+            - name: ENABLE_BOOTSNAP
+              value: '1'
+          volumeMounts:
+            - name: migrations-config
+              mountPath: '/var/opt/gitlab/templates'
+            - name: migrations-secrets
+              mountPath: '/etc/gitlab'
+              readOnly: true
+            - name: migrations-secrets
+              mountPath: /srv/gitlab/config/secrets.yml
+              subPath: rails-secrets/secrets.yml
+            - name: migrations-secrets
+              mountPath: /srv/gitlab/config/initial_root_password
+              subPath: migrations/initial_root_password
+            - name: migrations-secrets
+              mountPath: /srv/gitlab/config/gitlab_shared_runners_registration_token
+              subPath: migrations/gitlab_shared_runners_registration_token
+            - name: etc-ssl-certs
+              mountPath: /etc/ssl/certs/
+              readOnly: true
+          resources:
+            requests:
+              cpu: 250m
+              memory: 200Mi
+      volumes:
+      - name: migrations-config
+        configMap:
+          name: gitlab-migrations
+      - name: init-migrations-secrets
+        projected:
+          defaultMode: 0400
+          sources:
+          - secret:
+              name: "gitlab-rails-secret"
+              items:
+                - key: secrets.yml
+                  path: rails-secrets/secrets.yml
+          - secret:
+              name: "gitlab-gitaly-secret"
+              items:
+                - key: "token"
+                  path: gitaly/gitaly_token
+          
+          - secret:
+              name: "db-pass-secret"
+              items:
+                - key: "pass"
+                  path: postgres/psql-password
+          - secret:
+              name: "gitlab-gitlab-initial-root-password"
+              items:
+                - key: "password"
+                  path: migrations/initial_root_password
+      - name: migrations-secrets
+        emptyDir:
+          medium: "Memory"
+      
+      - name: etc-ssl-certs
+        emptyDir:
+          medium: "Memory"
+---
+
+# Source: gitlab/charts/gitlab/charts/migrations/templates/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gitlab-migrations
+  labels:
+    app: migrations
+    release: gitlab  
+data:
+  pages_redirect_uri: https://{{ .GITLAB_PAGES_URL }}/auth
+  installation_type: |
+    gitlab-helm-chart
+  database.yml.erb: |
+    production:
+      adapter: postgresql
+      encoding: unicode
+      database: gitlabhq_production
+      username: gitlab
+      password: "<%= File.read("/etc/gitlab/postgres/psql-password").strip.dump[1..-2] %>"
+      host: "{{ .GITLAB_POSTGRES_HOST }}"
+      port: {{ .GITLAB_POSTGRES_PORT }}
+      connect_timeout: 
+      application_name: 
+      prepared_statements: false
+      
+      
+  resque.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      
+      id:
+  
+  cable.yml.erb: |
+    production:
+      url: redis://{{ .GITLAB_REDIS_HOST }}
+      
+      id:
+      adapter: redis
+  gitlab.yml.erb: |
+    production: &base
+      gitlab:
+        host: {{ .GITLAB_URL }}
+      gitaly:
+        client_path: /home/git/gitaly/bin
+        token: "<%= File.read('/etc/gitlab/gitaly/gitaly_token').strip.dump[1..-2] %>"
+      repositories:
+        storages: # You must have at least a `default` storage path.
+          default:
+            path: /var/opt/gitlab/repo
+            gitaly_address: tcp://gitlab-gitaly-0.gitlab-gitaly.gitlab.svc:8075
+          
+      
+      sidekiq:
+      
+  configure: |
+    set -e
+    config_dir="/init-config"
+    secret_dir="/init-secrets"
+    
+    for secret in rails-secrets migrations gitaly ; do
+      mkdir -p "${secret_dir}/${secret}"
+      cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+    done
+    for secret in redis minio objectstorage postgres ldap omniauth smtp kas pages oauth-secrets ; do
+      if [ -e "${config_dir}/${secret}" ]; then
+        mkdir -p "${secret_dir}/${secret}"
+        cp -v -r -L "${config_dir}/${secret}/." "${secret_dir}/${secret}/"
+      fi
+    done

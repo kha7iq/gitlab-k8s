@@ -1,0 +1,11 @@
+resources:
+  - migration.yml
+
+images:
+- name: registry.gitlab.com/gitlab-org/build/cng/gitlab-task-runner-ce
+  newName: registry.gitlab.com/gitlab-org/build/cng/gitlab-task-runner-ce
+  newTag: v13.12.4
+
+- name: registry.gitlab.com/gitlab-org/build/cng/alpine-certificates
+  newName: registry.gitlab.com/gitlab-org/build/cng/alpine-certificates
+  newTag: 20191127-r2
