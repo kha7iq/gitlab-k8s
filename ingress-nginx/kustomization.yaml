@@ -1,0 +1,44 @@
+resources:
+  - ingress-nginx.yml
+  - ingress-object.yml
+
+images:
+- name: k8s.gcr.io/ingress-nginx/controller:v0.41.2@sha256
+  newName: k8s.gcr.io/ingress-nginx/controller:v0.41.2@sha256
+  newTag: 1f4f402b9c14f3ae92b11ada1dfe9893a88f0faeb0b2f4b903e2c67a0c3bf0de
+
+- name: k8s.gcr.io/defaultbackend-amd64
+  newName: k8s.gcr.io/defaultbackend-amd64
+  newTag: "1.5"
+
+patchesJSON6902:
+- target:
+    group: extensions
+    version: v1beta1
+    kind: Ingress
+    name: gitlab-webservice-default
+  patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: gitlab-web-ui.example.com
+    - op: replace
+      path: /spec/tls/0/hosts/0
+      value: gitlab-web-ui.example.com
+    - op: replace
+      path: /spec/tls/0/secretName
+      value: stack-pk-wildcard-secret
+- target:
+    group: extensions
+    version: v1beta1
+    kind: Ingress
+    name: gitlab-registry
+  patch: |-
+    - op: replace
+      path: /spec/rules/0/host
+      value: registry.example.com
+    - op: replace
+      path: /spec/tls/0/hosts/0
+      value: registry.example.com
+    - op: replace
+      path: /spec/tls/0/secretName
+      value: stack-pk-wildcard-secret

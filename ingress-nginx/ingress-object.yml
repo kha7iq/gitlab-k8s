@@ -1,0 +1,62 @@
+# Source: gitlab/charts/gitlab/charts/webservice/templates/ingress.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: gitlab-webservice-default
+  labels:
+    app: webservice
+    release: gitlab
+    gitlab.com/webservice-name: default
+  annotations:
+    kubernetes.io/ingress.class: "gitlab-nginx"
+    kubernetes.io/ingress.provider: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "512m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "15"
+    nginx.ingress.kubernetes.io/service-upstream: "true"
+spec:
+  rules:
+    - host: gitlab.example.com
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: gitlab-webservice-default
+              servicePort: 8181
+          - path: /admin/sidekiq/
+            backend:
+              serviceName: gitlab-webservice-default
+              servicePort: 8080
+  tls:
+    - hosts:
+      - gitlab.example.com
+      secretName: gitlab-tls-secret-name
+---
+# Source: gitlab/charts/registry/templates/ingress.yaml
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: gitlab-registry
+  labels:
+    app: registry
+    release: gitlab
+  annotations:
+    kubernetes.io/ingress.class: "gitlab-nginx"
+    kubernetes.io/ingress.provider: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "0"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "900"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    nginx.ingress.kubernetes.io/proxy-buffering: "off"
+spec:
+  rules:
+    - host: registry.example.com
+      http:
+        paths:
+          - path: /
+            backend:
+              serviceName: gitlab-registry
+              servicePort: 5000
+  tls:
+    - hosts:
+      - registry.example.com
+      secretName: registry-tls-secret-name
