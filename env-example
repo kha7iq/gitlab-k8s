@@ -1,0 +1,10 @@
+export GITLAB_URL=gitlab.example.com
+export GITLAB_REGISTRY_URL=registry.example.com
+export GITLAB_PAGES_URL=pages.example.com
+export GITLAB_POSTGRES_HOST=192.168.1.90
+export GITLAB_POSTGRES_PORT=5432
+export GITLAB_REDIS_HOST=192.168.1.91:6379
+export GITLAB_POSTGRES_USER=gitlab
+export GITLAB_POSTGRES_DB_NAME=gitlabhq_production
+export GITLAB_GITALY_STORAGE_SIZE=15Gi
+export GITLAB_STORAGE_CLASS=local-path
