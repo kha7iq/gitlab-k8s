@@ -7,7 +7,13 @@
 
 These manifests can be used  run GitLab on Kubernetes when you have related resources `postgres`, `redis`, `minio`, `tls certificates` etc already available in your environment.
 
-You can find complete details in this [article](https://lmno.pk/post/gitlab-installation-kubernets/)
+You can find complete details in these articles
+
+[Blog](https://lmno.pk/post/gitlab-installation-kubernets/)
+
+[r/Seflhosted Wiki](https://wiki.r-selfhosted.com/guides/devops-toolchains/gitlab-kubernetes/)
+
+[Dev.to](https://dev.to/kha7iq/installing-gitlab-on-kubernetes-with-kustomize-3ee6)
 
 * Render kubernetes manifest
 
